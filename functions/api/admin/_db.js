@@ -1,8 +1,8 @@
 export async function ensureSchema(db) {
-  // One-line SQL + prepare().run() avoids multiline/minification truncation issues
-  const sql = "CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, title TEXT NOT NULL, price INTEGER NOT NULL, description TEXT, category TEXT, image TEXT);";
-  await db.prepare(sql).run();
+  await db.prepare("CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, title TEXT NOT NULL, price INTEGER NOT NULL, description TEXT, category TEXT, image TEXT);").run();
+  await db.prepare("CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, name TEXT, phone TEXT, email TEXT, address TEXT, mode TEXT NOT NULL, subtotal INTEGER NOT NULL, shipping INTEGER NOT NULL, gst INTEGER NOT NULL, total INTEGER NOT NULL, items TEXT NOT NULL);").run();
 }
+
 
 export async function allProducts(db) {
   const { results } = await db.prepare(
