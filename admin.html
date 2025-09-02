@@ -1,0 +1,52 @@
+<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin — Braj Herbals</title>
+<style>
+  body{font-family:system-ui;margin:0}header{padding:12px 16px;border-bottom:1px solid #e5e5e5}
+  .card{border:1px solid #e5e5e5;border-radius:12px;padding:12px;margin:12px}
+  input{width:100%;padding:10px;margin:6px 0;border:1px solid #e5e5e5;border-radius:8px}
+  button{padding:10px 14px;border-radius:8px;border:1px solid #0a7;background:#0a7;color:#fff;cursor:pointer}
+  .muted{color:#555}
+</style>
+</head><body>
+<header><h2>Admin</h2></header>
+<main class="card">
+  <div id="loginBox">
+    <h3>Login</h3>
+    <input id="pass" type="password" placeholder="Admin password">
+    <button onclick="login()">Login</button>
+    <p id="msg" class="muted"></p>
+  </div>
+
+  <div id="app" style="display:none">
+    <p>Logged in. <button onclick="logout()" style="background:#fff;color:#0a7">Logout</button></p>
+    <p><a href="/shop.html">Go to Shop</a></p>
+  </div>
+</main>
+
+<script>
+// If you used my fallback earlier, password = ChangeMe#2025, token = tok_demo_123
+let TOKEN = localStorage.getItem('admintoken')||'';
+if (TOKEN) { document.getElementById('loginBox').style.display='none'; document.getElementById('app').style.display='block'; }
+
+async function login(){
+  const pwd = document.getElementById('pass').value;
+  const r = await fetch('/api/admin/login', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ password: pwd })
+  });
+  const d = await r.json();
+  if (d.token){
+    localStorage.setItem('admintoken', d.token);
+    document.getElementById('msg').textContent='Logged in';
+    location.reload();
+  } else {
+    document.getElementById('msg').textContent = d.error || 'Invalid password';
+  }
+}
+function logout(){
+  localStorage.removeItem('admintoken');
+  location.reload();
+}
+</script>
+</body></html>
