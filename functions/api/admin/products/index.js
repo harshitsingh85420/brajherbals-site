@@ -1,6 +1,6 @@
 import { ensureSchema, allProducts, upsertProduct } from "../_db.js";
 const ok = d => new Response(JSON.stringify(d), { headers: { "Content-Type": "application/json" }});
-const getToken = env => env.ADMIN_TOKEN || "tok_demo_123"; // fallback if env vars are missing
+const getToken = env => env.ADMIN_TOKEN || "tok_demo_123"; // fallback if env vars missing
 const authed = (req, env) => (req.headers.get("Authorization")||"") === ("Bearer " + getToken(env));
 
 export async function onRequestGet({ env }){
