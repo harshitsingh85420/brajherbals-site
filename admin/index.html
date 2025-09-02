@@ -2,41 +2,115 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin — Braj Herbals</title>
 <style>
-  body{font-family:system-ui;margin:0}header{padding:12px 16px;border-bottom:1px solid #e5e5e5}
-  .card{border:1px solid #e5e5e5;border-radius:12px;padding:12px;margin:12px}
-  input{width:100%;padding:10px;margin:6px 0;border:1px solid #e5e5e5;border-radius:8px}
-  button{padding:10px 14px;border-radius:8px;border:1px solid #0a7;background:#0a7;color:#fff;cursor:pointer}
+  :root{--bord:#e5e5e5;--brand:#0a7;--fg:#111}
+  *{box-sizing:border-box}body{margin:0;font-family:system-ui,Arial;color:var(--fg)}
+  header{padding:12px 16px;border-bottom:1px solid var(--bord)}
+  .wrap{max-width:920px;margin:0 auto;padding:12px}
+  .card{border:1px solid var(--bord);border-radius:12px;padding:12px;margin:12px 0;background:#fff}
+  input,textarea{width:100%;padding:10px;margin:6px 0;border:1px solid var(--bord);border-radius:8px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media(max-width:720px){.row{grid-template-columns:1fr}}
+  .btn,.btn-outline{padding:10px 14px;border-radius:8px;border:1px solid var(--brand);cursor:pointer}
+  .btn{background:var(--brand);color:#fff}.btn-outline{background:#fff;color:var(--brand)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
   .muted{color:#555}
 </style>
 </head><body>
-<header><h2>Admin</h2></header>
-<main class="card">
-  <div id="loginBox">
+<header><div class="wrap"><h2>Admin</h2></div></header>
+<div class="wrap">
+  <div id="loginBox" class="card">
     <h3>Login</h3>
     <input id="pass" type="password" placeholder="Admin password">
-    <button onclick="login()">Login</button>
+    <button class="btn" onclick="login()">Login</button>
     <p id="msg" class="muted"></p>
   </div>
+
   <div id="app" style="display:none">
-    <p>Logged in. <button onclick="logout()" style="background:#fff;color:#0a7">Logout</button></p>
-    <p><a href="/shop.html">Go to Shop</a></p>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+        <div>
+          <button class="btn" onclick="load()">Refresh</button>
+          <button class="btn-outline" onclick="showForm({})">New product</button>
+        </div>
+        <button class="btn-outline" onclick="logout()">Logout</button>
+      </div>
+    </div>
+
+    <div id="form" class="card" style="display:none"></div>
+    <div id="list" class="grid"></div>
   </div>
-</main>
+</div>
+
 <script>
-// If we used the fallback earlier: password = ChangeMe#2025, token = tok_demo_123
 let TOKEN = localStorage.getItem('admintoken')||'';
-if (TOKEN) { document.getElementById('loginBox').style.display='none'; document.getElementById('app').style.display='block'; }
+if(TOKEN){ document.getElementById('loginBox').style.display='none'; document.getElementById('app').style.display='block'; load(); }
 
 async function login(){
   const pwd = document.getElementById('pass').value;
-  const r = await fetch('/api/admin/login', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ password: pwd })
-  });
+  const r = await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});
   const d = await r.json();
-  if (d.token){ localStorage.setItem('admintoken', d.token); location.reload(); }
+  if(d.token){ TOKEN=d.token; localStorage.setItem('admintoken',TOKEN); location.reload(); }
   else document.getElementById('msg').textContent = d.error || 'Invalid password';
 }
 function logout(){ localStorage.removeItem('admintoken'); location.reload(); }
+
+function esc(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+function showForm(p){
+  p=p||{}; const el=document.getElementById('form'); el.style.display='block';
+  el.innerHTML = `
+    <h3>${p.id?'Edit':'New'} product</h3>
+    <div class="row">
+      <div><label>Title<input id="f_title" value="${esc(p.title||'')}"></label></div>
+      <div><label>Price (₹)<input id="f_price" type="number" value="${p.price||0}"></label></div>
+    </div>
+    <div class="row">
+      <div><label>Category<input id="f_cat" value="${esc(p.category||'')}"></label></div>
+      <div><label>Image URL<input id="f_img" value="${esc(p.image||'')}"></label></div>
+    </div>
+    <label>Description<textarea id="f_desc">${esc(p.description||'')}</textarea></label>
+    <div>
+      ${p.id? `<button class="btn" onclick="saveEdit('${p.id}')">Save</button>` : `<button class="btn" onclick="create()">Save</button>`}
+      <button class="btn-outline" onclick="cancelForm()">Cancel</button>
+    </div>`;
+}
+function cancelForm(){ document.getElementById('form').style.display='none'; }
+function collect(){
+  return {
+    title: document.getElementById('f_title').value.trim(),
+    price: Number(document.getElementById('f_price').value||0),
+    category: document.getElementById('f_cat').value.trim(),
+    image: document.getElementById('f_img').value.trim(),
+    description: document.getElementById('f_desc').value.trim()
+  };
+}
+async function create(){
+  const body=collect();
+  const r = await fetch('/api/admin/products',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(body)});
+  if (r.status===401){ alert('Session expired. Login again.'); logout(); return; }
+  if(r.ok){ cancelForm(); load(); } else alert(await r.text());
+}
+async function saveEdit(id){
+  const body=collect();
+  const r = await fetch('/api/admin/products/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(body)});
+  if (r.status===401){ alert('Session expired. Login again.'); logout(); return; }
+  if(r.ok){ cancelForm(); load(); } else alert(await r.text());
+}
+async function delp(id){
+  if(!confirm('Delete product?')) return;
+  const r = await fetch('/api/admin/products/'+encodeURIComponent(id),{method:'DELETE',headers:{'Authorization':'Bearer '+TOKEN}});
+  if (r.status===401){ alert('Session expired. Login again.'); logout(); return; }
+  if(r.ok){ load(); } else alert(await r.text());
+}
+async function load(){
+  const r = await fetch('/api/admin/products'); const items = await r.json();
+  const el = document.getElementById('list'); el.innerHTML='';
+  items.forEach(p=>{
+    const c=document.createElement('div'); c.className='card';
+    c.innerHTML = `<img src="${p.image||''}" alt="${p.title||''}" style="width:100%;height:160px;object-fit:cover;border-radius:8px">
+      <h3>${p.title||''}</h3><p>₹${p.price||0}</p><p class="muted">${p.category||''}</p>
+      <button class="btn-outline" onclick='(${showForm.toString()})(${JSON.stringify(p)})'>Edit</button>
+      <button class="btn" onclick="delp('${p.id}')">Delete</button>`;
+    el.appendChild(c);
+  });
+}
 </script>
 </body></html>
