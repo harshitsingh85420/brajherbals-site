@@ -1,29 +1,35 @@
-<!doctype html><html><head>
+<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cart — Braj Herbals</title>
 <style>
-  :root{--bord:#e5e5e5;--brand:#0a7;--fg:#111}
-  *{box-sizing:border-box} body{margin:0;font-family:system-ui,Arial;color:var(--fg)}
-  header{padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;gap:12px;align-items:center}
-  .wrap{max-width:900px;margin:0 auto;padding:12px}
+  :root{--bord:#e5e5e5;--brand:#0a7;--fg:#111;}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,Arial;color:var(--fg);background:#fafafa}
+  header{padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;gap:12px;align-items:center;background:#fff;position:sticky;top:0}
+  .wrap{max-width:960px;margin:0 auto;padding:12px}
   .card{border:1px solid var(--bord);border-radius:12px;padding:12px;margin:12px 0;background:#fff}
   .btn,.btn-outline{padding:10px 14px;border-radius:8px;border:1px solid var(--brand);cursor:pointer}
-  .btn{background:var(--brand);color:#fff}.btn-outline{background:#fff;color:#0a7}
-  table{width:100%;border-collapse:collapse} td,th{padding:8px;border-bottom:1px solid var(--bord)}
-  input,textarea,select{width:100%;padding:10px;margin:6px 0;border:1px solid var(--bord);border-radius:8px}
+  .btn{background:var(--brand);color:#fff}.btn:hover{opacity:.95}
+  .btn-outline{background:#fff;color:var(--brand)}
+  table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px solid var(--bord);vertical-align:middle}
+  input,textarea,select{width:100%;padding:10px;margin:6px 0;border:1px solid var(--bord);border-radius:8px;background:#fff}
+  .right{display:flex;gap:12px;align-items:center;margin-left:auto}
+  .totals p{margin:6px 0}
 </style>
-</head><body>
+</head>
+<body>
 <header>
   <a href="/shop.html">← Continue shopping</a>
-  <div style="margin-left:auto">Cart (<span id="cartCount">0</span>)</div>
+  <div class="right">Cart (<span id="cartCount">0</span>)</div>
 </header>
 
 <div class="wrap">
-  <div id="cart" class="card"></div>
+  <div id="cartBox" class="card"></div>
 
   <div class="card">
     <h3>Checkout</h3>
-    <form id="addr">
+    <form id="orderForm">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><input required name="name" placeholder="Full name"></div>
         <div><input required name="phone" placeholder="Phone"></div>
@@ -44,32 +50,126 @@
   </div>
 </div>
 
+<!-- Keep your badge in sync with other pages -->
 <script src="/js/cart.js"></script>
 <script>
-renderCart();
+/* cart.html self-contained renderer (uses localStorage directly) */
+const CART_KEY = "cart_items";
 
-document.getElementById('addr').onsubmit = async (e)=>{
+function readCart() {
+  try { return JSON.parse(localStorage.getItem(CART_KEY) || "[]"); }
+  catch { return []; }
+}
+function writeCart(items) {
+  localStorage.setItem(CART_KEY, JSON.stringify(items));
+  if (typeof updateCartBadge === 'function') updateCartBadge();
+}
+function clearCartLocal() {
+  localStorage.removeItem(CART_KEY);
+  if (typeof updateCartBadge === 'function') updateCartBadge();
+}
+
+function computeTotals(items){
+  const subtotal = items.reduce((s,i)=> s + (Number(i.price)||0) * (Number(i.qty)||1), 0);
+  const shipping = subtotal >= 999 ? 0 : 49;   // free shipping over ₹999
+  const gst = Math.round(subtotal * 0.05);     // demo 5%
+  return { subtotal, shipping, gst, total: subtotal + shipping + gst };
+}
+
+function updateQtyPage(id, qty){
+  qty = Math.max(1, Number(qty)||1);
+  const items = readCart();
+  const it = items.find(i => i.id === id);
+  if (it) it.qty = qty;
+  writeCart(items);
+  renderCartPage();
+}
+function removeItemPage(id){
+  writeCart(readCart().filter(i => i.id !== id));
+  renderCartPage();
+}
+function renderCartPage(){
+  const box = document.getElementById('cartBox');
+  const items = readCart();
+
+  if (!items.length){
+    box.innerHTML = `<p>Your cart is empty.</p>
+      <p><a class="btn-outline" href="/shop.html">Browse products</a></p>`;
+    return;
+  }
+
+  const { subtotal, shipping, gst, total } = computeTotals(items);
+
+  const rows = items.map(i=>`
+    <tr>
+      <td>${escapeHtml(i.title||'')}</td>
+      <td>₹${Number(i.price)||0}</td>
+      <td>
+        <input type="number" min="1" value="${i.qty||1}" style="width:90px"
+          oninput="updateQtyPage('${i.id}', this.value)">
+      </td>
+      <td>₹${(Number(i.price)||0) * (Number(i.qty)||1)}</td>
+      <td><button class="btn-outline" onclick="removeItemPage('${i.id}');return false;">Remove</button></td>
+    </tr>
+  `).join("");
+
+  box.innerHTML = `
+    <h3>Your Items</h3>
+    <table>
+      <thead><tr><th align="left">Item</th><th align="left">Price</th><th align="left">Qty</th><th align="left">Line</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div class="totals">
+      <p><b>Subtotal:</b> ₹${subtotal}</p>
+      <p><b>Shipping:</b> ₹${shipping} <span style="color:#777">(free over ₹999)</span></p>
+      <p><b>GST (5%):</b> ₹${gst}</p>
+      <p><b>Total:</b> ₹${total}</p>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn-outline" onclick="clearCartLocal(); renderCartPage();">Clear cart</button>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
+
+// Init
+document.addEventListener('DOMContentLoaded', ()=>{
+  if (typeof updateCartBadge === 'function') updateCartBadge();
+  renderCartPage();
+});
+
+// Place order (COD now; prepaid placeholder)
+document.getElementById('orderForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
-  const items = getCart();
+  const items = readCart();
   const status = document.getElementById('status');
-  if(!items.length){ status.textContent='Cart is empty'; return; }
+  if (!items.length){ status.textContent = 'Cart is empty.'; return; }
 
-  const payload = Object.fromEntries(new FormData(e.target).entries());
-  payload.items = items;
+  const data = Object.fromEntries(new FormData(e.target).entries());
+  data.items = items;
 
-  // COD works immediately. Prepaid will need Razorpay step (see next step).
-  if(payload.mode === 'cod'){
-    const r = await fetch('/api/orders', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    const d = await r.json();
-    if(d.ok){
-      status.textContent = 'Order placed: ' + d.order_id + ' • Total ₹' + d.total;
-      clearCart(); renderCart();
-    } else {
-      status.textContent = 'Order failed: ' + (d.error||'');
+  if (data.mode === 'cod'){
+    try{
+      const r = await fetch('/api/orders', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(data)
+      });
+      const d = await r.json();
+      if (d.ok){
+        status.textContent = `Order placed: ${d.order_id} • Total ₹${d.total}`;
+        clearCartLocal(); renderCartPage();
+      } else {
+        status.textContent = `Order failed: ${d.error||'unknown error'}`;
+      }
+    } catch(err){
+      status.textContent = 'Network error. Please try again.';
     }
   } else {
-    status.textContent = 'Prepaid coming up — set Razorpay keys first.';
+    status.textContent = 'Prepaid coming soon — enable Razorpay keys to activate.';
   }
-};
+});
 </script>
-</body></html>
+</body>
+</html>
