@@ -5,10 +5,12 @@
   :root{--bord:#e5e5e5;--brand:#0a7;--fg:#111}
   *{box-sizing:border-box} body{margin:0;font-family:system-ui,Arial;color:var(--fg)}
   header{padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;gap:12px;align-items:center}
-  .card{border:1px solid var(--bord);border-radius:12px;padding:12px;margin:12px;background:#fff}
+  .wrap{max-width:900px;margin:0 auto;padding:12px}
+  .card{border:1px solid var(--bord);border-radius:12px;padding:12px;margin:12px 0;background:#fff}
   .btn,.btn-outline{padding:10px 14px;border-radius:8px;border:1px solid var(--brand);cursor:pointer}
-  .btn{background:var(--brand);color:#fff}.btn-outline{background:#fff;color:var(--brand)}
-  table td, table th{padding:8px;border-bottom:1px solid var(--bord)}
+  .btn{background:var(--brand);color:#fff}.btn-outline{background:#fff;color:#0a7}
+  table{width:100%;border-collapse:collapse} td,th{padding:8px;border-bottom:1px solid var(--bord)}
+  input,textarea,select{width:100%;padding:10px;margin:6px 0;border:1px solid var(--bord);border-radius:8px}
 </style>
 </head><body>
 <header>
@@ -16,8 +18,58 @@
   <div style="margin-left:auto">Cart (<span id="cartCount">0</span>)</div>
 </header>
 
-<main id="cart" class="wrap"></main>
+<div class="wrap">
+  <div id="cart" class="card"></div>
+
+  <div class="card">
+    <h3>Checkout</h3>
+    <form id="addr">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><input required name="name" placeholder="Full name"></div>
+        <div><input required name="phone" placeholder="Phone"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><input required name="email" placeholder="Email"></div>
+        <div>
+          <select name="mode">
+            <option value="cod">Cash on Delivery</option>
+            <option value="prepaid">Prepaid (Razorpay)</option>
+          </select>
+        </div>
+      </div>
+      <textarea required name="address" placeholder="Full address"></textarea>
+      <button class="btn" type="submit">Place Order</button>
+    </form>
+    <p id="status" style="color:#555"></p>
+  </div>
+</div>
 
 <script src="/js/cart.js"></script>
-<script>renderCart();</script>
+<script>
+renderCart();
+
+document.getElementById('addr').onsubmit = async (e)=>{
+  e.preventDefault();
+  const items = getCart();
+  const status = document.getElementById('status');
+  if(!items.length){ status.textContent='Cart is empty'; return; }
+
+  const payload = Object.fromEntries(new FormData(e.target).entries());
+  payload.items = items;
+
+  // COD works immediately. Prepaid will need Razorpay step (see next step).
+  if(payload.mode === 'cod'){
+    const r = await fetch('/api/orders', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const d = await r.json();
+    if(d.ok){
+      status.textContent = 'Order placed: ' + d.order_id + ' • Total ₹' + d.total;
+      clearCart(); renderCart();
+    } else {
+      status.textContent = 'Order failed: ' + (d.error||'');
+    }
+  } else {
+    status.textContent = 'Prepaid coming up — set Razorpay keys first.';
+  }
+};
+</script>
 </body></html>
