@@ -1,0 +1,103 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orders — Admin</title>
+<style>
+  :root{--bord:#e5e5e5;--brand:#0a7;--fg:#111}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,Arial;color:var(--fg);background:#fafafa}
+  header{padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;gap:8px;align-items:center;background:#fff}
+  .wrap{max-width:1000px;margin:0 auto;padding:12px}
+  .card{border:1px solid var(--bord);border-radius:12px;padding:12px;margin:12px 0;background:#fff}
+  .btn,.btn-outline{padding:10px 14px;border-radius:8px;border:1px solid var(--brand);cursor:pointer}
+  .btn{background:var(--brand);color:#fff}.btn-outline{background:#fff;color:var(--brand)}
+  table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid var(--bord);vertical-align:top}
+  .muted{color:#555}
+</style>
+</head>
+<body>
+<header>
+  <a href="/admin/">← Admin Home</a>
+  <strong style="margin-left:8px">Orders</strong>
+  <div style="margin-left:auto;display:flex;gap:8px">
+    <button class="btn-outline" onclick="exportCSV()">Export CSV</button>
+    <button class="btn" onclick="load()">Refresh</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="msg" class="card" style="display:none"></div>
+  <div id="list" class="card"><p class="muted">Loading…</p></div>
+  <div id="detail" class="card" style="display:none"></div>
+</div>
+
+<script>
+const TOKEN = localStorage.getItem('admintoken') || '';
+if (!TOKEN) { location.href = '/admin/'; }
+
+function fmtAmt(n){ return '₹'+(Number(n)||0); }
+function fmtTS(ts){ const d=new Date(Number(ts)||Date.now()); return d.toLocaleString(); }
+function showMsg(t){ const el=document.getElementById('msg'); el.style.display='block'; el.textContent=t; setTimeout(()=>el.style.display='none',3000); }
+
+async function load(){
+  const r = await fetch('/api/admin/orders?limit=200', { headers:{ Authorization:'Bearer '+TOKEN }});
+  if (r.status===401){ alert('Login expired'); localStorage.removeItem('admintoken'); location.href='/admin/'; return; }
+  const orders = await r.json();
+  const rows = (orders||[]).map(o=>`
+    <tr>
+      <td><code>${o.id}</code><br><span class="muted">${fmtTS(o.created_at)}</span></td>
+      <td>${o.name||''}<br><span class="muted">${o.phone||''}</span></td>
+      <td><span class="muted">${o.email||''}</span></td>
+      <td>${o.mode?.toUpperCase()||''}</td>
+      <td>${fmtAmt(o.total)}<br><span class="muted">Subt ${fmtAmt(o.subtotal)} • Ship ${fmtAmt(o.shipping)} • GST ${fmtAmt(o.gst)}</span></td>
+      <td>
+        <button class="btn-outline" onclick="openOrder('${o.id}')">View</button>
+        <button class="btn" onclick="delOrder('${o.id}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+  document.getElementById('list').innerHTML = `
+    <h3>Orders</h3>
+    <table>
+      <thead><tr><th>ID / Time</th><th>Customer</th><th>Email/Phone</th><th>Mode</th><th>Total</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="muted">No orders yet.</td></tr>'}</tbody>
+    </table>`;
+}
+async function openOrder(id){
+  const r = await fetch('/api/admin/orders/'+encodeURIComponent(id), { headers:{ Authorization:'Bearer '+TOKEN }});
+  if (!r.ok){ showMsg('Failed to load order'); return; }
+  const o = await r.json();
+  const items = JSON.parse(o.items||'[]');
+  const lines = items.map(i=>`<li>${i.title} × ${i.qty} — ${fmtAmt(i.price)} (line: ${fmtAmt((Number(i.price)||0)*(Number(i.qty)||1))})</li>`).join('');
+  document.getElementById('detail').style.display='block';
+  document.getElementById('detail').innerHTML = `
+    <h3>Order ${o.id}</h3>
+    <p><b>Placed:</b> ${fmtTS(o.created_at)} • <b>Mode:</b> ${o.mode?.toUpperCase()}</p>
+    <p><b>Name:</b> ${o.name||''} • <b>Phone:</b> ${o.phone||''} • <b>Email:</b> ${o.email||''}</p>
+    <p><b>Address:</b><br>${(o.address||'').replace(/\n/g,'<br>')}</p>
+    <p><b>Items:</b></p>
+    <ul>${lines||'<li class="muted">None</li>'}</ul>
+    <p><b>Subtotal:</b> ${fmtAmt(o.subtotal)} • <b>Shipping:</b> ${fmtAmt(o.shipping)} • <b>GST:</b> ${fmtAmt(o.gst)} • <b>Total:</b> ${fmtAmt(o.total)}</p>
+  `;
+}
+async function delOrder(id){
+  if(!confirm('Delete order '+id+'?')) return;
+  const r = await fetch('/api/admin/orders/'+encodeURIComponent(id), { method:'DELETE', headers:{ Authorization:'Bearer '+TOKEN }});
+  if (!r.ok){ showMsg('Delete failed'); return; }
+  showMsg('Deleted '+id); document.getElementById('detail').style.display='none'; load();
+}
+
+async function exportCSV(){
+  const r = await fetch('/api/admin/orders?limit=200', { headers:{ Authorization:'Bearer '+TOKEN }});
+  if (!r.ok){ alert('Auth failed'); return; }
+  const arr = await r.json();
+  const head = ["id","created_at","name","phone","email","mode","subtotal","shipping","gst","total"];
+  const escape = v => `"${String(v??'').replace(/"/g,'""')}"`;
+  const rows = [head.join(",")].concat(arr.map(o=> head.map(k=>escape(o[k])).join(","))).join("\n");
+  const blob = new Blob([rows], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = "orders.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+load();
+</script>
+</body></html>
